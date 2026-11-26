@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#FFF8EE">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Jardim">
+<title>Jardim Digital</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600&family=Questrial&display=swap" rel="stylesheet">
+<style>
+/* VOICE: calmo, caseiro, como um caderno de sementes guardadas para depois.
+   IDEA: um jardim de vídeos — cada link é uma semente plantada num canteiro (tópico).
+   PICTURE: o próprio app: botão grande de colar, canteiros em abas, cartões com capa.
+   COLOUR and TYPE: paleta pastel do projeto; título KG Blank Space Solid → Fredoka, corpo Questrial.
+   LAYOUT: coluna única mobile-first, ações no alcance do polegar, abas fixas no topo ao rolar. */
+:root{color-scheme:light;--cream:#FFF8EE;--beige:#EDE2CC;--sage:#A5AF94;--sage-d:#7E8A6C;--latte:#C5A283;--latte-d:#8C6A4C;
+--pink:#E8CCC4;--blue:#D5DDE8;--butter:#F5E5B6;--lilac:#D6CCDD;--ink:#3A3A3A;--muted:#6B6358;--card:#FFFDF9;
+--title:'KG Blank Space Solid','Fredoka',ui-rounded,system-ui,sans-serif;--body:'Questrial',system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--cream);color:var(--ink)}
+body{font:16px/1.5 var(--body);-webkit-text-size-adjust:100%;overflow-x:clip}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--latte);outline-offset:2px}
+.app{max-width:640px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 18px) max(16px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 48px) max(16px,env(safe-area-inset-left))}
+.top{display:flex;align-items:center;gap:12px}
+.top svg{flex:none}
+h1{font-family:var(--title);font-weight:600;font-size:34px;line-height:1.05;margin:0;letter-spacing:-.01em}
+.store{font-size:13px;color:var(--muted);margin-top:2px}
+.composer{background:var(--beige);border-radius:24px;padding:14px;margin-top:16px}
+.lbl{font-size:14px;color:var(--muted);margin:0 0 6px 4px;display:block}
+textarea,.inp{width:100%;font-size:16px;border:2px solid transparent;border-radius:16px;padding:12px 14px;background:var(--card);resize:vertical}
+textarea{min-height:76px}
+textarea:focus,.inp:focus{outline:none;border-color:var(--latte)}
+.status{display:flex;align-items:center;gap:8px;margin:12px 4px 0;font-size:14px;color:var(--muted)}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid var(--latte);border-right-color:transparent;animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.preview{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;margin:12px 0 4px;align-items:start}
+.pfields{display:grid;gap:8px}
+.pfields textarea{min-height:64px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}
+.chip{min-height:40px;padding:0 14px;border-radius:999px;border:2px solid transparent;font-size:15px;background:var(--card)}
+.chip[aria-pressed=true]{border-color:var(--ink);font-weight:600}
+.chip.add{background:transparent;border:2px dashed var(--latte);color:var(--latte-d)}
+.hint{font-size:13px;color:var(--muted);margin:4px 4px 0}
+.row{display:flex;gap:10px}
+.save{flex:1;min-height:52px;border:0;border-radius:16px;background:var(--ink);color:var(--cream);font-size:18px}
+.save:disabled{opacity:.4}
+.ghost{min-height:52px;padding:0 16px;border:0;border-radius:16px;background:var(--card);font-size:16px}
+.tabs{position:sticky;top:0;z-index:5;display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;background:var(--cream);margin:20px -16px 0;padding:10px 16px}
+.tabs::-webkit-scrollbar,.plats::-webkit-scrollbar{display:none}
+.tab{flex:none;scroll-snap-align:start;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 8px 0 16px;border:0;border-radius:999px;font-size:16px}
+.n{font-size:13px;min-width:26px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.65);text-align:center}
+.tab[aria-selected=true]{background:var(--ink)!important;color:var(--cream)}
+.tab[aria-selected=true] .n,.pf[aria-pressed=true] .n{background:rgba(255,253,249,.22)}
+.plats{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:2px -16px 0;padding:2px 16px 8px}
+.pf{flex:none;display:flex;align-items:center;gap:6px;min-height:40px;padding:0 6px 0 12px;border-radius:999px;border:2px solid var(--beige);background:transparent;font-size:14px}
+.pf[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--cream)}
+.pf .n{background:var(--beige)}
+.tools{display:flex;gap:8px;align-items:center;margin:6px 0 14px}
+.tools .inp{flex:1;padding:10px 14px;border-radius:999px;background:var(--card)}
+.toggle{flex:none;min-height:44px;padding:0 14px;border-radius:999px;border:2px solid var(--beige);background:transparent;font-size:14px}
+.toggle[aria-pressed=true]{background:var(--beige)}
+.list{display:grid;gap:12px}
+.card{display:grid;grid-template-columns:96px minmax(0,1fr);gap:0 12px;background:var(--card);border-radius:22px;padding:12px;box-shadow:0 1px 0 rgba(58,58,58,.05),0 10px 24px -18px rgba(140,106,76,.55)}
+.card.done{opacity:.6}
+.thumb{position:relative;width:96px;height:128px;border-radius:16px;overflow:hidden;display:grid;place-items:center;text-align:center}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}
+.ph{display:grid;gap:5px;justify-items:center;font-size:12px;line-height:1.2;padding:6px;overflow-wrap:anywhere}
+.ph small{font-size:12px;color:var(--muted)}
+.ph span:not(.glyph){max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glyph{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;font-size:17px}
+.thumb .x{position:absolute;z-index:2;top:4px;right:4px;width:32px;height:32px;border:0;border-radius:50%;background:rgba(58,58,58,.72);color:#fff;font-size:18px;line-height:1}
+.meta{display:grid;gap:6px;align-content:start}
+.r1{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 11px;border-radius:999px;font-size:13px;white-space:nowrap}
+.b-tiktok{background:#111;color:#25F4EE;box-shadow:inset 3px 0 0 #25F4EE,inset -3px 0 0 #FE2C55}
+.b-instagram{background:linear-gradient(45deg,#F58529,#DD2A7B 55%,#8134AF);color:#fff}
+.b-youtube{background:#FF0000;color:#fff}
+.date{margin-left:auto;font-size:13px;color:var(--muted);white-space:nowrap}
+.cap{margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;line-height:1.4}
+.cap.empty{color:var(--muted)}
+.auth{font-size:14px;color:var(--latte-d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tagsel{-webkit-appearance:none;appearance:none;justify-self:start;min-height:34px;max-width:100%;border:0;border-radius:999px;padding:0 28px 0 12px;font-size:14px;background-repeat:no-repeat;background-position:right 10px center;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%233A3A3A' stroke-width='1.6'/%3E%3C/svg%3E")}
+.acts{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin-top:12px}
+.open{flex:1;display:flex;align-items:center;justify-content:center;min-height:46px;border-radius:14px;background:var(--ink);color:var(--cream);text-decoration:none;font-size:16px;white-space:nowrap}
+.check{display:flex;align-items:center;gap:8px;min-height:46px;padding:0 4px;font-size:15px;white-space:nowrap}
+.check input{width:22px;height:22px;margin:0;accent-color:var(--sage-d)}
+.notes{grid-column:1/-1;margin-top:10px}
+.note{width:100%;text-align:left;border:0;border-radius:14px;background:var(--butter);padding:10px 12px;font-size:15px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.note::before{content:"📝 ";}
+.addnote{border:0;background:none;color:var(--latte-d);font-size:15px;min-height:44px;padding:0 2px;text-decoration:underline;text-underline-offset:3px}
+.noteedit{display:grid;gap:8px}
+.noteedit textarea{min-height:88px;background:var(--cream);border-color:var(--beige)}
+.noteedit .row button{min-height:44px}
+.del{flex:none;display:grid;place-items:center;width:46px;height:46px;border:0;border-radius:14px;background:var(--pink)}
+.empty-state{text-align:center;padding:28px 12px;color:var(--muted)}
+.empty-state b{display:block;color:var(--ink);font-family:var(--title);font-weight:600;font-size:22px;margin:8px 0 4px}
+.rmtopic{display:block;margin:4px auto 0;border:0;background:none;color:var(--latte-d);text-decoration:underline;min-height:44px;font-size:14px}
+details.backup{margin-top:28px;color:var(--muted);font-size:14px}
+details.backup summary{min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;list-style:none}
+details.backup summary::-webkit-details-marker{display:none}
+.bk{background:var(--beige);border-radius:20px;padding:14px;display:grid;gap:10px;color:var(--ink)}
+.bk .row{flex-wrap:wrap}
+.bk .ghost{flex:1 1 140px}
+.file{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.file input{position:absolute;inset:0;opacity:0}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100% - 32px);padding:12px 18px;border-radius:999px;background:var(--ink);color:var(--cream);font-size:15px;box-shadow:0 10px 30px -10px rgba(0,0,0,.4);animation:up .22s ease-out}
+.toast.soft{background:var(--butter);color:var(--ink)}
+.toast button{border:0;background:none;color:var(--butter);font-size:15px;text-decoration:underline;min-height:32px}
+@keyframes up{from{opacity:0;transform:translate(-50%,10px)}}
+.veil{position:fixed;inset:0;z-index:30;background:rgba(58,58,58,.35);display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:640px;background:var(--cream);border-radius:26px 26px 0 0;padding:20px 16px calc(env(safe-area-inset-bottom) + 20px)}
+.sheet h2{font-family:var(--body);font-weight:400;font-size:22px;margin:0 0 12px}
+@media(prefers-reduced-motion:reduce){.toast{animation:none}.spin{animation-duration:3s}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+</head>
+<body>
+<div id="root"><p style="text-align:center;padding:40px;font-family:Questrial,sans-serif;color:#6B6358">Abrindo o jardim…</p></div>
+<script>
+{
+const {useState,useEffect,useRef,useMemo,useCallback}=React;
+const html=htm.bind(React.createElement);
+const KEY='jardim-digital-v1';
+const OUTROS='Outros';
+const DEFAULT_TOPICS=['Receitas','Tecnologia','Humor','Dicas','Treino','Viagem','Finanças',OUTROS];
+const COLORS=['var(--pink)','var(--blue)','var(--butter)','var(--lilac)','var(--sage)','var(--beige)'];
+const PLAT={tiktok:{name:'TikTok',open:'Abrir no TikTok'},instagram:{name:'Instagram',open:'Abrir no Instagram'},youtube:{name:'YouTube',open:'Abrir no YouTube'}};
+const GLYPH={tiktok:'♪',youtube:'▶',instagram:'◎'};
+const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const str=(x,n=2000)=>String(x==null?'':x).slice(0,n);
+const KW_RAW={
+Receitas:'receita recipe cozinha cozinhar bolo doce comida almoço jantar airfryer frango massa macarrão sobremesa chef food cook lanche ingrediente forno marmita salada pão brigadeiro torta molho café vegano confeitaria churrasco',
+Tecnologia:'tech tecnologia iphone android app ia ai chatgpt claude programação programar código code python javascript computador gadget celular notebook software excel atalho ios mac setup dev inteligência review unboxing',
+Humor:'humor meme engraçado piada comédia kkk kkkk rs funny lol risada zoeira zueira rir comedy trollagem prank',
+Dicas:'dica tip hack truque aprenda tutorial passo organização organizar limpeza lifehack produtividade sabia segredo como fazer',
+Treino:'treino academia gym workout exercício musculação abdômen abdominal cardio fitness corrida yoga pilates glúteo hipertrofia alongamento perna braço emagrecer',
+Viagem:'viagem viajar travel trip praia hotel roteiro turismo destino passagem voo europa mochilão pousada cidade aeroporto férias',
+'Finanças':'finanças finance dinheiro investimento investir renda economia economizar bolsa ações cripto bitcoin salário money orçamento cdb tesouro poupança dívida'};
+const KW={};for(const k in KW_RAW)KW[k]=norm(KW_RAW[k]).split(/\s+/);
+
+/* ---------- links ---------- */
+function platformOf(host){
+  const is=d=>host===d||host.endsWith('.'+d);
+  if(is('tiktok.com'))return 'tiktok';
+  if(is('instagram.com'))return 'instagram';
+  if(is('youtube.com')||is('youtu.be'))return 'youtube';
+  return null;
+}
+function findLink(text){
+  const toks=String(text||'').match(/\S+/g)||[];
+  for(const raw of toks){
+    const t=raw.replace(/^[(<\["'“‘]+/,'').replace(/[)>\]"'”’.,;:!?]+$/,'');
+    if(!/^(https?:\/\/)?([a-z0-9-]+\.)*(tiktok\.com|instagram\.com|youtube\.com|youtu\.be)(\/|$)/i.test(t))continue;
+    const url=/^https?:\/\//i.test(t)?t.replace(/^http:/i,'https:'):'https://'+t;
+    try{const p=platformOf(new URL(url).hostname.toLowerCase());if(p)return {raw,url,platform:p}}catch(e){}
+  }
+  return null;
+}
+const cleanCaption=(text,raw)=>String(text||'').replace(raw,' ').replace(/https?:\/\/\S+/g,' ').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().replace(/^[-–—:|·]+|[-–—:|·]+$/g,'').trim();
+function ytId(url){
+  try{const u=new URL(url);const h=u.hostname.replace(/^(www|m|music)\./,'');
+    const id=h==='youtu.be'?u.pathname.slice(1).split('/')[0]:u.searchParams.get('v')||((u.pathname.match(/^\/(shorts|embed|live|v)\/([\w-]+)/)||[])[2]);
+    return id&&/^[\w-]{6,20}$/.test(id)?id:null}catch(e){return null}
+}
+const ytThumb=url=>{const id=ytId(url);return id?'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg':''};
+const IG_RESERVED=new Set(['p','reel','reels','tv','stories','explore','accounts','share']);
+function userFromUrl(url,platform){
+  try{const seg=new URL(url).pathname.split('/').filter(Boolean);
+    if(platform==='tiktok'){const s=seg.find(x=>x.startsWith('@'));return s?s:''}
+    if(platform==='instagram'){if(seg[0]==='stories'&&seg[1])return '@'+seg[1];if(seg[0]&&!IG_RESERVED.has(seg[0].toLowerCase()))return '@'+seg[0]}
+    if(platform==='youtube'){const s=seg.find(x=>x.startsWith('@'));return s?s:''}
+  }catch(e){}
+  return '';
+}
+const safeHttps=u=>typeof u==='string'&&u.length<2000&&/^https:\/\/[^\s"'<>]+$/.test(u)?u:'';
+
+/* ---------- metadados (oEmbed) ---------- */
+async function getJSON(u){
+  const c=new AbortController();const t=setTimeout(()=>c.abort(),7000);
+  try{const r=await fetch(u,{signal:c.signal,credentials:'omit'});if(!r.ok)throw new Error('http '+r.status);const j=await r.json();if(!j||j.error)throw new Error('no data');return j}
+  finally{clearTimeout(t)}
+}
+function handleOf(j){
+  if(j.author_unique_id)return '@'+str(j.author_unique_id,60);
+  const m=String(j.author_url||'').match(/\/(@[\w.-]+)/);
+  return m?m[1]:str(j.author_name,80);
+}
+async function fetchMeta(url,platform){
+  const E=encodeURIComponent(url);
+  const tries=platform==='tiktok'?['https://www.tiktok.com/oembed?url='+E,'https://noembed.com/embed?url='+E]
+    :platform==='youtube'?['https://noembed.com/embed?url='+E,'https://www.youtube.com/oembed?url='+E+'&format=json']
+    :['https://noembed.com/embed?url='+E];
+  for(const u of tries){
+    try{const j=await getJSON(u);
+      if(!j.title&&!j.author_name)continue;
+      return {ok:true,title:str(j.title).trim(),author:handleOf(j)||userFromUrl(url,platform),
+        thumbUrl:platform==='youtube'?(ytThumb(url)||safeHttps(j.thumbnail_url)):safeHttps(j.thumbnail_url)};
+    }catch(e){}
+  }
+  return {ok:false,title:'',author:userFromUrl(url,platform),thumbUrl:platform==='youtube'?ytThumb(url):''};
+}
+
+/* ---------- tópicos ---------- */
+function suggestTopic(text,topics){
+  const t=' '+norm(text).replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ')+' ';
+  let best=null,score=0;
+  for(const topic of topics){
+    if(topic===OUTROS)continue;
+    let s=0;
+    for(const w of new Set([...(KW[topic]||[]),...norm(topic).split(/\s+/)])){
+      if(w.length<2)continue;
+      if(t.includes(' '+w+' '))s+=2;else if(w.length>=4&&t.includes(' '+w))s+=1;else if(w.length>=5&&t.includes(w))s+=.5;
+    }
+    if(s>score){score=s;best=topic}
+  }
+  return best||(topics.includes(OUTROS)?OUTROS:topics[0]);
+}
+const newId=()=>Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);
+const colorOf=(topics,t)=>{const i=topics.indexOf(t);return COLORS[(i<0?topics.length:i)%COLORS.length]};
+const THUMB_RE=/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+function sanitizeItems(arr){
+  if(!Array.isArray(arr))return [];
+  const out=[];
+  for(const x of arr){
+    if(!x||typeof x!=='object')continue;
+    const l=findLink(x.url);if(!l)continue;
+    out.push({id:/^[A-Za-z0-9_.~:@+-]{1,60}$/.test(x.id||'')?x.id:newId(),url:l.url,platform:l.platform,
+      caption:str(x.caption||x.title),note:str(x.note),author:str(x.author,80),thumbUrl:safeHttps(x.thumbUrl),
+      thumb:typeof x.thumb==='string'&&x.thumb.length<400000&&THUMB_RE.test(x.thumb)?x.thumb:'',
+      topic:str(x.topic||OUTROS,30).trim()||OUTROS,watched:!!x.watched,createdAt:Number(x.createdAt)||Date.now()});
+  }
+  return out;
+}
+function mergeTopics(base,extra){
+  const out=[...base];
+  for(const t of extra||[]){const n=str(t,30).trim();if(n&&!out.some(o=>norm(o)===norm(n))){const i=out.indexOf(OUTROS);out.splice(i<0?out.length:i,0,n)}}
+  if(!out.includes(OUTROS))out.push(OUTROS);
+  return out;
+}
+function mergeItems(a,b){const seen=new Set(a.map(i=>i.url));return [...a,...b.filter(i=>!seen.has(i.url)&&seen.add(i.url))].sort((x,y)=>y.createdAt-x.createdAt)}
+const withTimeout=(p,ms)=>Promise.race([p,new Promise(r=>setTimeout(()=>r(null),ms))]);
+
+/* ---------- armazenamento: window.storage → conta Claude → IndexedDB (fora do Claude) ---------- */
+async function initStore(){
+  try{
+    const ws=window.storage;
+    if(ws&&typeof ws.get==='function'&&typeof ws.set==='function'){
+      return {label:'Salvo com window.storage',
+        async load(){try{const r=await ws.get(KEY);const v=r&&typeof r==='object'?r.value:r;return v?JSON.parse(v):null}catch(e){return null}},
+        async save(s){await ws.set(KEY,JSON.stringify({topics:s.topics,items:s.items}))}};
+    }
+  }catch(e){}
+  try{
+    if(window.claude&&typeof window.claude.use==='function'){
+      const [db,user]=await Promise.all([withTimeout(window.claude.use('db'),10000),withTimeout(window.claude.use('user'),10000)]);
+      const id=db&&user?await user.id():null;
+      if(db&&id)return dbStore(db.collection('data/users/'+id));
+    }
+  }catch(e){}
+  try{if(window.indexedDB){const s=idbStore();await s.load();return s}}catch(e){}
+  return {label:'Sem armazenamento — exporte um backup antes de sair',load:async()=>null,save:async()=>{}};
+}
+function dbStore(col){
+  let base=new Map(),chain=Promise.resolve();
+  return {label:'Salvo na sua conta Claude',
+    async load(){
+      const snap=await col.get();let topics=null;const items=[];base=new Map();
+      for(const d of snap.docs){const v=d.data();if(!v)continue;
+        if(d.id==='meta')topics=Array.isArray(v.topics)?v.topics:null;else if(d.id.startsWith('l-'))items.push(v);else continue;
+        base.set(d.id,JSON.stringify(v))}
+      return snap.empty?null:{topics,items};
+    },
+    save(s){
+      const p=chain.then(async()=>{
+        const next=new Map([['meta',JSON.stringify({topics:s.topics})]]);
+        for(const it of s.items)next.set('l-'+it.id,JSON.stringify(it));
+        for(const [k,v] of next)if(base.get(k)!==v){await col.doc(k).set(JSON.parse(v));base.set(k,v)}
+        for(const k of [...base.keys()])if(!next.has(k)){await col.doc(k).delete();base.delete(k)}
+      });
+      chain=p.catch(()=>{});return p;
+    }};
+}
+function idbStore(){
+  let dbp=null;
+  const open=()=>dbp||(dbp=new Promise((res,rej)=>{const r=indexedDB.open('jardim-digital',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>{dbp=null;rej(r.error)}}));
+  const run=(mode,fn)=>open().then(db=>new Promise((res,rej)=>{const t=db.transaction('kv',mode);const q=fn(t.objectStore('kv'));t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error)}));
+  try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{})}catch(e){}
+  return {label:'Salvo neste aparelho',
+    async load(){const v=await run('readonly',s=>s.get(KEY));return v?JSON.parse(v):null},
+    save:s=>run('readwrite',st=>st.put(JSON.stringify({topics:s.topics,items:s.items}),KEY))};
+}
+
+/* ---------- imagens ---------- */
+async function toThumb(file){
+  if(!file||!/^image\//.test(file.type||'image/'))throw new Error('not image');
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});
+    const W=img.naturalWidth,H=img.naturalHeight,r=3/4;let sw=W,sh=H;if(W/H>r)sw=H*r;else sh=W/r;
+    const c=document.createElement('canvas');c.width=360;c.height=480;
+    c.getContext('2d').drawImage(img,(W-sw)/2,(H-sh)/2*.6,sw,sh,0,0,360,480);
+    return c.toDataURL('image/jpeg',.7);
+  }finally{URL.revokeObjectURL(url)}
+}
+
+const Sprout=({size=44})=>html`<svg width=${size} height=${size} viewBox="0 0 48 48" aria-hidden="true">
+  <ellipse cx="24" cy="41" rx="15" ry="4" fill="#C5A283"/><path d="M24 40V22" stroke="#7E8A6C" stroke-width="3" stroke-linecap="round"/>
+  <path d="M24 26c-9 1-14-4-14-12 8-1 14 3 14 12z" fill="#A5AF94"/><path d="M24 22c1-8 6-12 14-12 0 8-5 13-14 12z" fill="#C9D0BB"/>
+  <circle cx="35" cy="34" r="3" fill="#E8CCC4"/><circle cx="13" cy="35" r="2.4" fill="#F5E5B6"/></svg>`;
+const Trash=()=>html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3A3A3A" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>`;
+const Badge=({p})=>html`<span class=${'badge b-'+p}>${GLYPH[p]} ${PLAT[p].name}</span>`;
+const fmtDate=ms=>new Date(ms).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}).replace('.','');
+
+function Thumb({it,color,onPick,onClear}){
+  const src=it.thumb||it.thumbUrl||(it.platform==='youtube'?ytThumb(it.url):'');
+  const [bad,setBad]=useState(false);
+  useEffect(()=>setBad(false),[src]);
+  const ok=src&&!bad;
+  return html`<div class="thumb" style=${{background:ok?'var(--beige)':color}}>
+    ${ok?html`<img src=${src} alt="" loading="lazy" referrerpolicy="no-referrer" onError=${()=>setBad(true)}/>`
+      :html`<span class="ph"><span class=${'glyph b-'+it.platform}>${GLYPH[it.platform]}</span>${it.author?html`<span>${it.author}</span>`:null}<small>+ capa</small></span>`}
+    <input type="file" accept="image/*" aria-label=${ok?'Trocar capa':'Adicionar capa'} onChange=${onPick}/>
+    ${it.thumb&&html`<button class="x" aria-label="Remover capa" onClick=${onClear}>×</button>`}
+  </div>`;
+}
+
+function NoteBox({note,onSave}){
+  const [editing,setEditing]=useState(false);
+  const [val,setVal]=useState(note||'');
+  const start=()=>{setVal(note||'');setEditing(true)};
+  const done=()=>{onSave(val.trim().slice(0,2000));setEditing(false)};
+  if(editing)return html`<div class="notes noteedit">
+    <textarea autoFocus aria-label="Nota" placeholder="Por que guardei este vídeo? Ingredientes, horário, ideia…" value=${val} onChange=${e=>setVal(e.target.value)}></textarea>
+    <div class="row"><button class="save" onClick=${done}>Salvar nota</button>${note&&html`<button class="ghost" onClick=${()=>{onSave('');setEditing(false)}}>Apagar</button>`}<button class="ghost" onClick=${()=>setEditing(false)}>Cancelar</button></div>
+  </div>`;
+  return html`<div class="notes">${note?html`<button class="note" aria-label="Editar nota" onClick=${start}>${note}</button>`:html`<button class="addnote" onClick=${start}>+ Adicionar nota</button>`}</div>`;
+}
+
+function App(){
+  const [topics,setTopics]=useState(DEFAULT_TOPICS);
+  const [items,setItems]=useState([]);
+  const [ready,setReady]=useState(false);
+  const [storeLabel,setStoreLabel]=useState('Abrindo…');
+  const [text,setText]=useState('');
+  const [caption,setCaption]=useState('');
+  const [author,setAuthor]=useState('');
+  const [note,setNote]=useState('');
+  const [meta,setMeta]=useState(null);
+  const [pick,setPick]=useState(null);
+  const [draftThumb,setDraftThumb]=useState('');
+  const [tab,setTab]=useState('Todos');
+  const [plat,setPlat]=useState('all');
+  const [hideDone,setHideDone]=useState(false);
+  const [q,setQ]=useState('');
+  const [toast,setToast]=useState(null);
+  const [sheet,setSheet]=useState(null);
+  const [newName,setNewName]=useState('');
+  const [dl,setDl]=useState(null);
+  const [importText,setImportText]=useState('');
+  const [exportText,setExportText]=useState('');
+  const store=useRef(null),skip=useRef(true),lastClip=useRef(''),ta=useRef(null),toastT=useRef(0),touched=useRef({});
+  const textRef=useRef(text),itemsRef=useRef(items);textRef.current=text;itemsRef.current=items;
+
+  const show=useCallback((msg,opts={})=>{clearTimeout(toastT.current);setToast({msg,...opts});toastT.current=setTimeout(()=>setToast(null),opts.ms||3200)},[]);
+  const link=useMemo(()=>findLink(text),[text]);
+  const suggested=useMemo(()=>link?suggestTopic([caption,meta&&meta.title,text].join(' '),topics):null,[link,caption,meta,text,topics]);
+  const chosen=pick&&topics.includes(pick)?pick:suggested;
+
+  const applyText=useCallback(t=>{
+    setText(t);const l=findLink(t);
+    setCaption(l?cleanCaption(t,l.raw):'');setAuthor(l?userFromUrl(l.url,l.platform):'');
+    setPick(null);setNote('');touched.current={};
+  },[]);
+
+  /* busca de metadados sempre que um novo link aparece */
+  const url=link&&link.url,platform=link&&link.platform;
+  useEffect(()=>{
+    if(!url){setMeta(null);return}
+    let live=true;setMeta({url,status:'loading'});
+    const t=setTimeout(async()=>{
+      const m=await fetchMeta(url,platform);
+      if(!live)return;
+      setMeta({url,status:m.ok?'ok':'fail',...m});
+      if(!touched.current.caption&&m.title)setCaption(c=>c||m.title);
+      if(!touched.current.author&&m.author)setAuthor(a=>m.ok?m.author:(a||m.author));
+      if(m.ok)setItems(p=>p.map(i=>i.url===url?{...i,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl}:i));
+    },250);
+    return ()=>{live=false;clearTimeout(t)};
+  },[url,platform]);
+
+  useEffect(()=>{(async()=>{
+    const st=await initStore();store.current=st;
+    const data=await st.load().catch(()=>null);
+    if(data){if(Array.isArray(data.topics))setTopics(mergeTopics([],data.topics));setItems(prev=>mergeItems(prev,sanitizeItems(data.items)))}
+    skip.current=true;setStoreLabel(st.label);setReady(true);
+    try{const sp=new URLSearchParams(location.search);const shared=sp.get('url')||sp.get('text');if(shared){applyText(shared.slice(0,4000));history.replaceState(null,'',location.pathname)}}catch(e){}
+    try{if(window.claude&&window.claude.use){const d=await withTimeout(window.claude.use('downloads'),10000);if(d)setDl(d)}}catch(e){}
+  })()},[]);
+
+  useEffect(()=>{
+    if(!ready)return;
+    if(skip.current){skip.current=false;return}
+    const t=setTimeout(()=>{try{store.current&&store.current.save({topics,items}).catch(()=>show('Não consegui salvar agora. Faça um backup em JSON.',{soft:true,ms:5000}))}catch(e){}},450);
+    return ()=>clearTimeout(t);
+  },[topics,items,ready]);
+
+  /* completa, uma vez, cards antigos sem título/autor (só funciona onde a internet está liberada) */
+  useEffect(()=>{
+    if(!ready)return;
+    (async()=>{
+      const todo=itemsRef.current.filter(i=>!i.caption||!i.author).slice(0,25);
+      for(const it of todo){
+        const m=await fetchMeta(it.url,it.platform);
+        if(!m.ok)break;
+        setItems(p=>p.map(i=>i.id===it.id?{...i,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl}:i));
+      }
+    })();
+  },[ready]);
+
+  const readClipboard=useCallback(async manual=>{
+    let t='';
+    try{if(!navigator.clipboard||!navigator.clipboard.readText)throw 0;t=await navigator.clipboard.readText()}
+    catch(e){if(manual){ta.current&&ta.current.focus();show('O iPhone bloqueou a leitura. Toque e segure no campo e escolha Colar.',{soft:true,ms:5000})}return}
+    const l=findLink(t);
+    if(!l){if(manual)show(t?'Nenhum link do TikTok, Instagram ou YouTube copiado.':'A área de transferência está vazia.',{soft:true});return}
+    if(!manual){
+      if(t===lastClip.current||textRef.current.trim())return;
+      if(itemsRef.current.some(i=>i.url===l.url)){lastClip.current=t;return}
+    }
+    lastClip.current=t;applyText(t);
+    show(manual?'Vídeo colado — confira o tópico e salve.':'Link detectado da área de transferência!',{soft:!manual});
+  },[applyText,show]);
+
+  useEffect(()=>{
+    if(!ready)return;
+    const auto=()=>{if(document.visibilityState==='visible')readClipboard(false).catch(()=>{})};
+    auto();
+    window.addEventListener('focus',auto);document.addEventListener('visibilitychange',auto);
+    return ()=>{window.removeEventListener('focus',auto);document.removeEventListener('visibilitychange',auto)};
+  },[ready,readClipboard]);
+
+  function save(){
+    if(!link)return;
+    if(items.some(i=>i.url===link.url)){show('Esse vídeo já está no seu jardim.',{soft:true});return}
+    const m=meta&&meta.url===link.url?meta:{};
+    const it={id:newId(),url:link.url,platform:link.platform,caption:caption.trim().slice(0,2000),note:note.trim().slice(0,2000),author:author.trim().slice(0,80),
+      thumbUrl:m.thumbUrl||(link.platform==='youtube'?ytThumb(link.url):''),thumb:draftThumb,topic:chosen||OUTROS,watched:false,createdAt:Date.now()};
+    setItems(p=>[it,...p]);applyText('');setDraftThumb('');show('Plantado em '+it.topic+' 🌱');
+  }
+  const update=(id,patch)=>setItems(p=>p.map(i=>i.id===id?{...i,...patch}:i));
+  function remove(it){
+    setItems(p=>p.filter(i=>i.id!==it.id));
+    show('Vídeo excluído.',{ms:5000,action:{label:'Desfazer',fn:()=>{setItems(p=>mergeItems(p,[it]));setToast(null)}}});
+  }
+  async function pickThumb(e,id){
+    const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;
+    try{const t=await toThumb(f);if(id==='draft')setDraftThumb(t);else update(id,{thumb:t});show('Capa adicionada.')}
+    catch(err){show('Não consegui usar essa imagem.',{soft:true})}
+  }
+  function onPasteShare(e){
+    const list=e.clipboardData&&e.clipboardData.items;if(!list)return;
+    for(const x of list){if(x.kind==='file'&&/^image\//.test(x.type)){const f=x.getAsFile();
+      if(!e.clipboardData.getData('text'))e.preventDefault();
+      toThumb(f).then(t=>{setDraftThumb(t);show('Capa colada.')}).catch(()=>{});return}}
+  }
+  function createTopic(e){
+    e&&e.preventDefault();
+    const n=newName.trim().replace(/\s+/g,' ').slice(0,24);if(!n)return;
+    const existing=topics.find(t=>norm(t)===norm(n));const name=existing||n;
+    if(!existing)setTopics(p=>mergeTopics(p,[n]));
+    if(sheet&&sheet.for==='draft')setPick(name);else if(sheet)update(sheet.for,{topic:name});
+    setSheet(null);setNewName('');show(existing?'Tópico já existia — selecionado.':'Tópico “'+n+'” criado.');
+  }
+  function removeTopic(t){setTopics(p=>p.filter(x=>x!==t));setTab('Todos');show('Tópico removido.')}
+
+  const backupJSON=()=>JSON.stringify({app:'jardim-digital',version:2,exportedAt:new Date().toISOString(),topics,items},null,2);
+  async function download(){
+    try{await dl.save({filename:'jardim-digital-'+new Date().toISOString().slice(0,10)+'.json',data:backupJSON()});show('Backup salvo.')}
+    catch(e){if(!e||e.code!=='declined')show('Não deu para baixar aqui. Use Copiar JSON.',{soft:true})}
+  }
+  async function copyJSON(){
+    const data=backupJSON();
+    try{await navigator.clipboard.writeText(data);show('JSON copiado. Guarde no app Notas.')}catch(e){setExportText(data);show('Selecione o texto abaixo e copie.',{soft:true})}
+  }
+  function doImport(raw){
+    try{
+      const d=JSON.parse(raw);const arr=sanitizeItems(Array.isArray(d)?d:d.items);
+      if(!arr.length){show('Nenhum vídeo válido nesse JSON.',{soft:true});return}
+      const before=items.length;const merged=mergeItems(items,arr);
+      setTopics(p=>mergeTopics(p,[...(Array.isArray(d.topics)?d.topics:[]),...arr.map(i=>i.topic)]));
+      setItems(merged);setImportText('');show((merged.length-before)+' vídeos importados.');
+    }catch(e){show('JSON inválido.',{soft:true})}
+  }
+  function onFile(e){const f=e.target.files&&e.target.files[0];if(!f)return;f.text().then(doImport).catch(()=>show('Não consegui ler o arquivo.',{soft:true}));e.target.value=''}
+
+  const allTopics=useMemo(()=>mergeTopics(topics,items.map(i=>i.topic)),[topics,items]);
+  const inPlat=useMemo(()=>plat==='all'?items:items.filter(i=>i.platform===plat),[items,plat]);
+  const counts=useMemo(()=>{const c={};for(const i of inPlat)c[i.topic]=(c[i.topic]||0)+1;return c},[inPlat]);
+  const pcounts=useMemo(()=>{const c={tiktok:0,instagram:0,youtube:0};for(const i of items)if(tab==='Todos'||i.topic===tab)c[i.platform]++;return c},[items,tab]);
+  const nq=norm(q.trim());
+  const visible=inPlat.filter(i=>(tab==='Todos'||i.topic===tab)&&(!hideDone||!i.watched)&&(!nq||norm([i.caption,i.note,i.author,i.topic,PLAT[i.platform].name].join(' ')).includes(nq)));
+  const done=items.filter(i=>i.watched).length;
+  const filtered=q||hideDone||plat!=='all';
+  const draft=link?{platform:link.platform,url:link.url,author,thumb:draftThumb,thumbUrl:meta&&meta.url===link.url?meta.thumbUrl:''}:null;
+
+  return html`<div class="app">
+    <header class="top"><${Sprout}/><div><h1>Jardim Digital</h1><div class="store">${items.length} ${items.length===1?'vídeo guardado':'vídeos guardados'}${done?' · '+done+' assistidos':''} · ${storeLabel}</div></div></header>
+
+    <section class="composer" aria-label="Novo vídeo">
+      <label class="lbl" for="share">Cole aqui o link ou o texto compartilhado</label>
+      <textarea id="share" ref=${ta} value=${text} placeholder="Ex.: https://www.tiktok.com/@… ou https://youtu.be/…" onPaste=${onPasteShare} onChange=${e=>applyText(e.target.value)}></textarea>
+      ${text.trim()&&!link&&html`<p class="hint">Não encontrei um link do TikTok, Instagram ou YouTube nesse texto.</p>`}
+      ${link&&html`<div>
+        ${meta&&meta.status==='loading'&&html`<p class="status" role="status"><span class="spin"></span>Buscando informações do vídeo...</p>`}
+        ${meta&&meta.status==='ok'&&html`<p class="status">✓ Informações do vídeo encontradas</p>`}
+        ${meta&&meta.status==='fail'&&html`<p class="status">${link.platform==='instagram'?'O Instagram não liberou as informações. Escreva uma palavra-chave rápida.':'Não consegui buscar as informações. Escreva um título se quiser.'}</p>`}
+        <div class="preview">
+          <${Thumb} it=${draft} color=${colorOf(topics,chosen)} onPick=${e=>pickThumb(e,'draft')} onClear=${()=>setDraftThumb('')}/>
+          <div class="pfields">
+            <div class="r1"><${Badge} p=${link.platform}/></div>
+            <textarea aria-label="Título ou legenda" value=${caption} placeholder=${link.platform==='instagram'?'Palavra-chave rápida (ex.: receita de pão)':'Título ou legenda'} onChange=${e=>{touched.current.caption=true;setCaption(e.target.value)}}></textarea>
+            <input class="inp" aria-label="Autor" value=${author} placeholder="@autor" onChange=${e=>{touched.current.author=true;setAuthor(e.target.value)}}/>
+            <input class="inp" aria-label="Nota" value=${note} placeholder="📝 Nota (opcional)" onChange=${e=>setNote(e.target.value)}/>
+          </div>
+        </div>
+        <span class="lbl" style=${{marginTop:'12px'}}>Tópico ${pick?'':'sugerido'}</span>
+        <div class="chips" role="group" aria-label="Tópico">
+          ${topics.map(t=>html`<button key=${t} class="chip" aria-pressed=${t===chosen} style=${{background:colorOf(topics,t)==='var(--beige)'?'var(--card)':colorOf(topics,t)}} onClick=${()=>setPick(t)}>${t}</button>`)}
+          <button class="chip add" onClick=${()=>setSheet({for:'draft'})}>+ Novo tópico</button>
+        </div>
+        <div class="row"><button class="save" onClick=${save}>Salvar em ${chosen}</button><button class="ghost" onClick=${()=>{applyText('');setDraftThumb('')}}>Limpar</button></div>
+      </div>`}
+    </section>
+
+    <nav class="tabs" role="tablist" aria-label="Tópicos">
+      ${['Todos',...allTopics].map(t=>html`<button key=${t} role="tab" class="tab" aria-selected=${tab===t} style=${{background:t==='Todos'?'var(--beige)':colorOf(allTopics,t)}} onClick=${()=>setTab(t)}>${t}<span class="n">${t==='Todos'?inPlat.length:(counts[t]||0)}</span></button>`)}
+    </nav>
+    ${items.length>0&&html`<div class="plats" role="group" aria-label="Plataforma">
+      <button class="pf" aria-pressed=${plat==='all'} onClick=${()=>setPlat('all')}>Todas as plataformas</button>
+      ${Object.keys(PLAT).map(p=>html`<button key=${p} class="pf" aria-pressed=${plat===p} onClick=${()=>setPlat(plat===p?'all':p)}>${GLYPH[p]} ${PLAT[p].name}<span class="n">${pcounts[p]}</span></button>`)}
+    </div>
+    <div class="tools">
+      <input class="inp" type="search" placeholder="Buscar título, nota ou @autor" value=${q} onChange=${e=>setQ(e.target.value)} aria-label="Buscar"/>
+      <button class="toggle" aria-pressed=${hideDone} onClick=${()=>setHideDone(v=>!v)}>Ocultar assistidos</button>
+    </div>`}
+
+    <div class="list">
+      ${visible.map(it=>html`<article key=${it.id} class=${'card'+(it.watched?' done':'')}>
+        <${Thumb} it=${it} color=${colorOf(allTopics,it.topic)} onPick=${e=>pickThumb(e,it.id)} onClear=${()=>update(it.id,{thumb:''})}/>
+        <div class="meta">
+          <div class="r1"><${Badge} p=${it.platform}/><span class="date">${fmtDate(it.createdAt)}</span></div>
+          <p class=${'cap'+(it.caption?'':' empty')}>${it.caption?(it.caption.length>180?it.caption.slice(0,177).trim()+'…':it.caption):'Sem título · vídeo do '+PLAT[it.platform].name}</p>
+          ${it.author&&html`<span class="auth">${it.author.startsWith('@')?it.author:'@'+it.author}</span>`}
+          <select class="tagsel" aria-label="Tópico" value=${it.topic} style=${{backgroundColor:colorOf(allTopics,it.topic)}}
+            onChange=${e=>e.target.value==='__new'?setSheet({for:it.id}):update(it.id,{topic:e.target.value})}>
+            ${allTopics.map(t=>html`<option key=${t} value=${t}>${t}</option>`)}<option value="__new">+ Novo tópico…</option>
+          </select>
+        </div>
+        <div class="acts">
+          <a class="open" href=${it.url} target="_blank" rel="noopener noreferrer">${PLAT[it.platform].open}</a>
+          <label class="check"><input type="checkbox" checked=${it.watched} onChange=${e=>update(it.id,{watched:e.target.checked})}/>Assistido</label>
+          <button class="del" aria-label="Excluir" onClick=${()=>remove(it)}><${Trash}/></button>
+        </div>
+        <${NoteBox} note=${it.note} onSave=${v=>update(it.id,{note:v})}/>
+      </article>`)}
+    </div>
+
+    ${ready&&visible.length===0&&html`<div class="empty-state"><${Sprout} size=${64}/>
+      <b>${items.length===0?'Seu jardim está vazio':filtered?'Nada por aqui':'Canteiro vazio'}</b>
+      ${items.length===0?'No TikTok, Instagram ou YouTube toque em Compartilhar → Copiar link e volte aqui: o link aparece sozinho ou é só colar no campo acima.':filtered?'Mude a plataforma, a busca ou mostre os assistidos.':'Nenhum vídeo em “'+tab+'” ainda.'}
+      ${tab!=='Todos'&&tab!==OUTROS&&!items.some(i=>i.topic===tab)&&html`<button class="rmtopic" onClick=${()=>removeTopic(tab)}>Excluir o tópico “${tab}”</button>`}
+    </div>`}
+
+    <details class="backup"><summary>Backup em JSON</summary>
+      <div class="bk">
+        <div class="row">
+          ${dl&&html`<button class="ghost" onClick=${download}>Baixar arquivo</button>`}
+          <button class="ghost" onClick=${copyJSON}>Copiar JSON</button>
+          <label class="ghost file">Importar arquivo<input type="file" accept=".json,application/json,text/plain" onChange=${onFile}/></label>
+        </div>
+        ${exportText&&html`<textarea readonly value=${exportText} onFocus=${e=>e.target.select()} aria-label="JSON exportado"></textarea>`}
+        <textarea value=${importText} placeholder="…ou cole aqui um JSON de backup" onChange=${e=>setImportText(e.target.value)} aria-label="Colar JSON"></textarea>
+        <button class="save" disabled=${!importText.trim()} onClick=${()=>doImport(importText)}>Importar JSON colado</button>
+        <p class="hint">A importação junta os vídeos e ignora os repetidos.</p>
+      </div>
+    </details>
+
+    ${sheet&&html`<div class="veil" onClick=${e=>{if(e.target===e.currentTarget)setSheet(null)}}>
+      <form class="sheet" onSubmit=${createTopic}>
+        <h2>Novo tópico</h2>
+        <input class="inp" autoFocus maxLength="24" placeholder="Ex.: Maquiagem, Livros, Pets" value=${newName} onChange=${e=>setNewName(e.target.value)}/>
+        <div class="row" style=${{marginTop:'12px'}}><button class="save" type="submit" disabled=${!newName.trim()}>Criar tópico</button><button class="ghost" type="button" onClick=${()=>setSheet(null)}>Cancelar</button></div>
+      </form>
+    </div>`}
+
+    ${toast&&html`<div class=${'toast'+(toast.soft?' soft':'')} role="status">${toast.msg}${toast.action&&html`<button onClick=${toast.action.fn}>${toast.action.label}</button>`}</div>`}
+  </div>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+}
+</script>
+</body>
+</html>
