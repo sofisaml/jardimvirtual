@@ -95,6 +95,9 @@ textarea:focus,.inp:focus{outline:none;border-color:var(--latte)}
 .note::before{content:"📝 ";}
 .addnote{border:0;background:none;color:var(--latte-d);font-size:15px;min-height:44px;padding:0 2px;text-decoration:underline;text-underline-offset:3px}
 .noteedit{display:grid;gap:8px}
+.diag{font-size:13px;color:var(--muted)}
+.diag summary{min-height:44px;display:flex;align-items:center;cursor:pointer}
+.diag ul{margin:0 0 6px;padding-left:18px;overflow-wrap:anywhere}
 .noteedit textarea{min-height:88px;background:var(--cream);border-color:var(--beige)}
 .noteedit .row button{min-height:44px}
 .del{flex:none;display:grid;place-items:center;width:46px;height:46px;border:0;border-radius:14px;background:var(--pink)}
@@ -183,29 +186,48 @@ function userFromUrl(url,platform){
 const safeHttps=u=>typeof u==='string'&&u.length<2000&&/^https:\/\/[^\s"'<>]+$/.test(u)?u:'';
 
 /* ---------- metadados (oEmbed) ---------- */
+let customProxy='';
+const PROXIES=[
+  {name:'allorigins',wrap:u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},
+  {name:'codetabs',wrap:u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)},
+  {name:'corsproxy.io',wrap:u=>'https://corsproxy.io/?url='+encodeURIComponent(u)}];
+function wrapCustom(p,u){return p.includes('{url}')?p.replace('{url}',encodeURIComponent(u)):p+encodeURIComponent(u)}
 async function getJSON(u){
-  const c=new AbortController();const t=setTimeout(()=>c.abort(),7000);
-  try{const r=await fetch(u,{signal:c.signal,credentials:'omit'});if(!r.ok)throw new Error('http '+r.status);const j=await r.json();if(!j||j.error)throw new Error('no data');return j}
+  const c=new AbortController();const t=setTimeout(()=>c.abort(),6500);
+  let r;
+  try{r=await fetch(u,{signal:c.signal,credentials:'omit'})}
+  catch(e){throw new Error(e&&e.name==='AbortError'?'tempo esgotado':'bloqueado (CORS) ou sem conexão')}
   finally{clearTimeout(t)}
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  let j;try{j=JSON.parse(await r.text())}catch(e){throw new Error('resposta não é JSON')}
+  if(!j||j.error||(!j.title&&!j.author_name))throw new Error(j&&j.error?'sem dados: '+str(j.error,60):'sem título/autor');
+  return j;
 }
 function handleOf(j){
   if(j.author_unique_id)return '@'+str(j.author_unique_id,60);
   const m=String(j.author_url||'').match(/\/(@[\w.-]+)/);
   return m?m[1]:str(j.author_name,80);
 }
-async function fetchMeta(url,platform){
+function metaTries(url,platform){
   const E=encodeURIComponent(url);
-  const tries=platform==='tiktok'?['https://www.tiktok.com/oembed?url='+E,'https://noembed.com/embed?url='+E]
-    :platform==='youtube'?['https://noembed.com/embed?url='+E,'https://www.youtube.com/oembed?url='+E+'&format=json']
-    :['https://noembed.com/embed?url='+E];
-  for(const u of tries){
-    try{const j=await getJSON(u);
-      if(!j.title&&!j.author_name)continue;
-      return {ok:true,title:str(j.title).trim(),author:handleOf(j)||userFromUrl(url,platform),
+  const tk='https://www.tiktok.com/oembed?url='+E, ne='https://noembed.com/embed?url='+E, yt='https://www.youtube.com/oembed?url='+E+'&format=json';
+  const out=[];
+  const main=platform==='tiktok'?tk:platform==='youtube'?yt:ne;
+  if(customProxy)out.push({name:'proxy próprio',u:wrapCustom(customProxy,main)});
+  if(platform==='tiktok'){out.push({name:'TikTok direto',u:tk});PROXIES.forEach(p=>out.push({name:p.name,u:p.wrap(tk)}));out.push({name:'noembed',u:ne})}
+  else if(platform==='youtube'){out.push({name:'noembed',u:ne},{name:'YouTube direto',u:yt});PROXIES.slice(0,1).forEach(p=>out.push({name:p.name,u:p.wrap(yt)}))}
+  else out.push({name:'noembed',u:ne});
+  return out;
+}
+async function fetchMeta(url,platform){
+  const log=[];
+  for(const t of metaTries(url,platform)){
+    try{const j=await getJSON(t.u);log.push(t.name+': ok');
+      return {ok:true,via:t.name,log,title:str(j.title).trim(),author:handleOf(j)||userFromUrl(url,platform),
         thumbUrl:platform==='youtube'?(ytThumb(url)||safeHttps(j.thumbnail_url)):safeHttps(j.thumbnail_url)};
-    }catch(e){}
+    }catch(e){log.push(t.name+': '+e.message)}
   }
-  return {ok:false,title:'',author:userFromUrl(url,platform),thumbUrl:platform==='youtube'?ytThumb(url):''};
+  return {ok:false,log,title:'',author:userFromUrl(url,platform),thumbUrl:platform==='youtube'?ytThumb(url):''};
 }
 
 /* ---------- tópicos ---------- */
@@ -255,7 +277,7 @@ async function initStore(){
     if(ws&&typeof ws.get==='function'&&typeof ws.set==='function'){
       return {label:'Salvo com window.storage',
         async load(){try{const r=await ws.get(KEY);const v=r&&typeof r==='object'?r.value:r;return v?JSON.parse(v):null}catch(e){return null}},
-        async save(s){await ws.set(KEY,JSON.stringify({topics:s.topics,items:s.items}))}};
+        async save(s){await ws.set(KEY,JSON.stringify(s))}};
     }
   }catch(e){}
   try{
@@ -272,15 +294,15 @@ function dbStore(col){
   let base=new Map(),chain=Promise.resolve();
   return {label:'Salvo na sua conta Claude',
     async load(){
-      const snap=await col.get();let topics=null;const items=[];base=new Map();
+      const snap=await col.get();let topics=null,settings=null;const items=[];base=new Map();
       for(const d of snap.docs){const v=d.data();if(!v)continue;
-        if(d.id==='meta')topics=Array.isArray(v.topics)?v.topics:null;else if(d.id.startsWith('l-'))items.push(v);else continue;
+        if(d.id==='meta'){topics=Array.isArray(v.topics)?v.topics:null;settings=v.settings||null}else if(d.id.startsWith('l-'))items.push(v);else continue;
         base.set(d.id,JSON.stringify(v))}
-      return snap.empty?null:{topics,items};
+      return snap.empty?null:{topics,items,settings};
     },
     save(s){
       const p=chain.then(async()=>{
-        const next=new Map([['meta',JSON.stringify({topics:s.topics})]]);
+        const next=new Map([['meta',JSON.stringify({topics:s.topics,settings:s.settings||{}})]]);
         for(const it of s.items)next.set('l-'+it.id,JSON.stringify(it));
         for(const [k,v] of next)if(base.get(k)!==v){await col.doc(k).set(JSON.parse(v));base.set(k,v)}
         for(const k of [...base.keys()])if(!next.has(k)){await col.doc(k).delete();base.delete(k)}
@@ -295,7 +317,7 @@ function idbStore(){
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist().catch(()=>{})}catch(e){}
   return {label:'Salvo neste aparelho',
     async load(){const v=await run('readonly',s=>s.get(KEY));return v?JSON.parse(v):null},
-    save:s=>run('readwrite',st=>st.put(JSON.stringify({topics:s.topics,items:s.items}),KEY))};
+    save:s=>run('readwrite',st=>st.put(JSON.stringify(s),KEY))};
 }
 
 /* ---------- imagens ---------- */
@@ -364,6 +386,9 @@ function App(){
   const [sheet,setSheet]=useState(null);
   const [newName,setNewName]=useState('');
   const [dl,setDl]=useState(null);
+  const [proxy,setProxy]=useState('');
+  const [retry,setRetry]=useState(0);
+  customProxy=proxy;
   const [importText,setImportText]=useState('');
   const [exportText,setExportText]=useState('');
   const store=useRef(null),skip=useRef(true),lastClip=useRef(''),ta=useRef(null),toastT=useRef(0),touched=useRef({});
@@ -394,12 +419,12 @@ function App(){
       if(m.ok)setItems(p=>p.map(i=>i.url===url?{...i,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl}:i));
     },250);
     return ()=>{live=false;clearTimeout(t)};
-  },[url,platform]);
+  },[url,platform,retry]);
 
   useEffect(()=>{(async()=>{
     const st=await initStore();store.current=st;
     const data=await st.load().catch(()=>null);
-    if(data){if(Array.isArray(data.topics))setTopics(mergeTopics([],data.topics));setItems(prev=>mergeItems(prev,sanitizeItems(data.items)))}
+    if(data){const px=data.settings&&safeHttps(data.settings.proxy);if(px){customProxy=px;setProxy(px)}if(Array.isArray(data.topics))setTopics(mergeTopics([],data.topics));setItems(prev=>mergeItems(prev,sanitizeItems(data.items)))}
     skip.current=true;setStoreLabel(st.label);setReady(true);
     try{const sp=new URLSearchParams(location.search);const shared=sp.get('url')||sp.get('text');if(shared){applyText(shared.slice(0,4000));history.replaceState(null,'',location.pathname)}}catch(e){}
     try{if(window.claude&&window.claude.use){const d=await withTimeout(window.claude.use('downloads'),10000);if(d)setDl(d)}}catch(e){}
@@ -408,9 +433,9 @@ function App(){
   useEffect(()=>{
     if(!ready)return;
     if(skip.current){skip.current=false;return}
-    const t=setTimeout(()=>{try{store.current&&store.current.save({topics,items}).catch(()=>show('Não consegui salvar agora. Faça um backup em JSON.',{soft:true,ms:5000}))}catch(e){}},450);
+    const t=setTimeout(()=>{try{store.current&&store.current.save({topics,items,settings:{proxy}}).catch(()=>show('Não consegui salvar agora. Faça um backup em JSON.',{soft:true,ms:5000}))}catch(e){}},450);
     return ()=>clearTimeout(t);
-  },[topics,items,ready]);
+  },[topics,items,proxy,ready]);
 
   /* completa, uma vez, cards antigos sem título/autor (só funciona onde a internet está liberada) */
   useEffect(()=>{
@@ -520,8 +545,13 @@ function App(){
       ${text.trim()&&!link&&html`<p class="hint">Não encontrei um link do TikTok, Instagram ou YouTube nesse texto.</p>`}
       ${link&&html`<div>
         ${meta&&meta.status==='loading'&&html`<p class="status" role="status"><span class="spin"></span>Buscando informações do vídeo...</p>`}
-        ${meta&&meta.status==='ok'&&html`<p class="status">✓ Informações do vídeo encontradas</p>`}
-        ${meta&&meta.status==='fail'&&html`<p class="status">${link.platform==='instagram'?'O Instagram não liberou as informações. Escreva uma palavra-chave rápida.':'Não consegui buscar as informações. Escreva um título se quiser.'}</p>`}
+        ${meta&&meta.status==='ok'&&html`<p class="status">✓ Informações do vídeo encontradas (via ${meta.via})</p>`}
+        ${meta&&meta.status==='fail'&&html`<div>
+          <p class="status">${link.platform==='instagram'?'O Instagram não liberou as informações. Escreva uma palavra-chave rápida.':'Não consegui buscar as informações. Escreva um título se quiser.'}</p>
+          <div class="row" style=${{alignItems:'center',margin:'4px 0 0'}}>
+            <button class="addnote" onClick=${()=>setRetry(n=>n+1)}>↻ Tentar de novo</button>
+            <details class="diag"><summary>Detalhes técnicos</summary><ul>${(meta.log||[]).map((l,i)=>html`<li key=${i}>${l}</li>`)}</ul></details>
+          </div></div>`}
         <div class="preview">
           <${Thumb} it=${draft} color=${colorOf(topics,chosen)} onPick=${e=>pickThumb(e,'draft')} onClear=${()=>setDraftThumb('')}/>
           <div class="pfields">
@@ -579,7 +609,7 @@ function App(){
       ${tab!=='Todos'&&tab!==OUTROS&&!items.some(i=>i.topic===tab)&&html`<button class="rmtopic" onClick=${()=>removeTopic(tab)}>Excluir o tópico “${tab}”</button>`}
     </div>`}
 
-    <details class="backup"><summary>Backup em JSON</summary>
+    <details class="backup"><summary>Backup e ajustes</summary>
       <div class="bk">
         <div class="row">
           ${dl&&html`<button class="ghost" onClick=${download}>Baixar arquivo</button>`}
@@ -590,6 +620,10 @@ function App(){
         <textarea value=${importText} placeholder="…ou cole aqui um JSON de backup" onChange=${e=>setImportText(e.target.value)} aria-label="Colar JSON"></textarea>
         <button class="save" disabled=${!importText.trim()} onClick=${()=>doImport(importText)}>Importar JSON colado</button>
         <p class="hint">A importação junta os vídeos e ignora os repetidos.</p>
+        <label class="lbl" for="px" style=${{margin:'8px 0 0 4px'}}>Proxy próprio para buscar informações (opcional)</label>
+        <input id="px" class="inp" inputMode="url" placeholder="https://seu-worker.workers.dev/?url=" defaultValue=${proxy} key=${'px'+proxy}
+          onBlur=${e=>{const v=e.target.value.trim();if(!v){setProxy('');return}const ok=safeHttps(v);if(ok){setProxy(ok);show('Proxy salvo.')}else show('Use um endereço https://',{soft:true})}}/>
+        <p class="hint">Se o TikTok continuar sem trazer título e capa, crie um proxy grátis no Cloudflare Workers e cole o endereço aqui.</p>
       </div>
     </details>
 
