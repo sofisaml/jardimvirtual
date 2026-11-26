@@ -304,7 +304,8 @@ async function fetchMeta(url,platform){
   if(platform==='tiktok'){
     const w=await workerTikTok(url,log);
     if(w.j){const j=w.j;const fu=TK_FULL.test(j.url||'')?(j.url.match(TK_FULL)||[])[0]:'';
-      return {ok:true,via:'seu proxy',log,title:str(j.title).trim(),author:str(j.author,80)||fromUrl,thumbUrl:safeHttps(j.thumbnail_url),fullUrl:fu&&fu!==url?fu:''}}
+      const thumbData=await dataToThumb(j.thumbnail_data);if(j.thumbnail_url)log.push(thumbData?'capa guardada no app':'capa não pôde ser guardada (só o link)');
+      return {ok:true,via:'seu proxy',log,title:str(j.title).trim(),author:str(j.author,80)||fromUrl,thumbUrl:safeHttps(j.thumbnail_url),thumbData,fullUrl:fu&&fu!==url?fu:''}}
     const ownNote=w.own?'Seu proxy: '+w.own+'. ':'';
     let full=url,html='';
     if(isTikTokShort(url)){
@@ -414,16 +415,22 @@ function idbStore(){
 }
 
 /* ---------- imagens ---------- */
+function drawThumb(img){
+  const W=img.naturalWidth,H=img.naturalHeight,r=3/4;let sw=W,sh=H;if(W/H>r)sw=H*r;else sh=W/r;
+  const c=document.createElement('canvas');c.width=360;c.height=480;
+  c.getContext('2d').drawImage(img,(W-sw)/2,(H-sh)/2*.6,sw,sh,0,0,360,480);
+  return c.toDataURL('image/jpeg',.7);
+}
+const loadImg=src=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src});
 async function toThumb(file){
   if(!file||!/^image\//.test(file.type||'image/'))throw new Error('not image');
   const url=URL.createObjectURL(file);
-  try{
-    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});
-    const W=img.naturalWidth,H=img.naturalHeight,r=3/4;let sw=W,sh=H;if(W/H>r)sw=H*r;else sh=W/r;
-    const c=document.createElement('canvas');c.width=360;c.height=480;
-    c.getContext('2d').drawImage(img,(W-sw)/2,(H-sh)/2*.6,sw,sh,0,0,360,480);
-    return c.toDataURL('image/jpeg',.7);
-  }finally{URL.revokeObjectURL(url)}
+  try{return drawThumb(await loadImg(url))}finally{URL.revokeObjectURL(url)}
+}
+/* capa que veio do proxy em base64 → JPEG 360×480 guardado no próprio card */
+async function dataToThumb(data){
+  if(typeof data!=='string'||!/^data:image\/(jpeg|png|webp|gif|avif|heic);base64,[A-Za-z0-9+/=]+$/.test(data)||data.length>2200000)return '';
+  try{return drawThumb(await loadImg(data))}catch(e){return ''}
 }
 
 const Sprout=({size=44})=>html`<svg width=${size} height=${size} viewBox="0 0 48 48" aria-hidden="true">
@@ -507,7 +514,7 @@ function App(){
       setMeta({url,status:m.ok?'ok':m.partial?'partial':'fail',...m});
       if(!touched.current.caption&&m.title)setCaption(c=>c||m.title);
       if(!touched.current.author&&m.author)setAuthor(a=>m.ok?m.author:(a||m.author));
-      if(m.ok||m.thumbUrl)setItems(p=>p.map(i=>i.url===url?{...i,url:m.fullUrl||i.url,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl}:i));
+      if(m.ok||m.thumbUrl)setItems(p=>p.map(i=>i.url===url?{...i,url:m.fullUrl||i.url,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl,thumb:i.thumb||m.thumbData||''}:i));
     },250);
     return ()=>{live=false;clearTimeout(t)};
   },[url,platform,retry]);
@@ -532,11 +539,12 @@ function App(){
   useEffect(()=>{
     if(!ready)return;
     (async()=>{
-      const todo=itemsRef.current.filter(i=>!i.caption||!i.author).slice(0,25);
+      const todo=itemsRef.current.filter(i=>!i.caption||!i.author||(i.platform==='tiktok'&&!i.thumb)).slice(0,25);
       for(const it of todo){
         const m=await fetchMeta(it.url,it.platform);
         if(!m.ok)break;
-        setItems(p=>p.map(i=>i.id===it.id?{...i,url:m.fullUrl||i.url,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl}:i));
+        setItems(p=>p.map(i=>i.id===it.id?{...i,url:m.fullUrl||i.url,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:m.thumbUrl||i.thumbUrl,thumb:i.thumb||m.thumbData||''}:i));
+        await new Promise(r=>setTimeout(r,1200));
       }
     })();
   },[ready]);
@@ -568,7 +576,7 @@ function App(){
     if(items.some(i=>i.url===link.url||(meta&&meta.fullUrl&&i.url===meta.fullUrl))){show('Esse vídeo já está no seu jardim.',{soft:true});return}
     const m=meta&&meta.url===link.url?meta:{};
     const it={id:newId(),url:m.fullUrl||link.url,platform:link.platform,caption:caption.trim().slice(0,2000),note:note.trim().slice(0,2000),author:author.trim().slice(0,80),
-      thumbUrl:m.thumbUrl||(link.platform==='youtube'?ytThumb(link.url):''),thumb:draftThumb,topic:chosen||OUTROS,watched:false,createdAt:Date.now()};
+      thumbUrl:m.thumbUrl||(link.platform==='youtube'?ytThumb(link.url):''),thumb:draftThumb||m.thumbData||'',topic:chosen||OUTROS,watched:false,createdAt:Date.now()};
     setItems(p=>[it,...p]);applyText('');setDraftThumb('');show('Plantado em '+it.topic+' 🌱');
   }
   const update=(id,patch)=>setItems(p=>p.map(i=>i.id===id?{...i,...patch}:i));
