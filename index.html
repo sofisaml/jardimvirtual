@@ -96,6 +96,8 @@ textarea:focus,.inp:focus{outline:none;border-color:var(--latte)}
 .addnote{border:0;background:none;color:var(--latte-d);font-size:15px;min-height:44px;padding:0 2px;text-decoration:underline;text-underline-offset:3px}
 .noteedit{display:grid;gap:8px}
 .diag{font-size:13px;color:var(--muted)}
+.why .status{display:block;background:var(--card);border-radius:12px;padding:10px 12px;margin-inline:0;color:var(--ink)}
+.why b{font-weight:600}
 .diag summary{min-height:44px;display:flex;align-items:center;cursor:pointer}
 .diag ul{margin:0 0 6px;padding-left:18px;overflow-wrap:anywhere}
 .noteedit textarea{min-height:88px;background:var(--cream);border-color:var(--beige)}
@@ -187,20 +189,40 @@ const safeHttps=u=>typeof u==='string'&&u.length<2000&&/^https:\/\/[^\s"'<>]+$/.
 
 /* ---------- metadados (oEmbed) ---------- */
 let customProxy='';
+/* Proxies públicos gratuitos (instáveis). raw = devolve o conteúdo original; get = JSON do allorigins com {contents,status.url}. */
 const PROXIES=[
-  {name:'allorigins',wrap:u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},
-  {name:'codetabs',wrap:u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)},
-  {name:'corsproxy.io',wrap:u=>'https://corsproxy.io/?url='+encodeURIComponent(u)}];
+  {name:'allorigins',kind:'get',wrap:u=>'https://api.allorigins.win/get?url='+encodeURIComponent(u)},
+  {name:'corsproxy.io',kind:'raw',wrap:u=>'https://corsproxy.io/?url='+encodeURIComponent(u)},
+  {name:'codetabs',kind:'raw',wrap:u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)}];
 function wrapCustom(p,u){return p.includes('{url}')?p.replace('{url}',encodeURIComponent(u)):p+encodeURIComponent(u)}
-async function getJSON(u){
-  const c=new AbortController();const t=setTimeout(()=>c.abort(),6500);
+class MetaError extends Error{constructor(code,msg){super(msg);this.code=code}}
+/* Busca texto; via=null é direto. Classifica o erro num código legível. */
+async function getText(target,via){
+  const u=via?(via.custom?wrapCustom(via.custom,target):via.wrap(target)):target;
+  const c=new AbortController();const t=setTimeout(()=>c.abort(),8000);
   let r;
   try{r=await fetch(u,{signal:c.signal,credentials:'omit'})}
-  catch(e){throw new Error(e&&e.name==='AbortError'?'tempo esgotado':'bloqueado (CORS) ou sem conexão')}
-  finally{clearTimeout(t)}
-  if(!r.ok)throw new Error('HTTP '+r.status);
-  let j;try{j=JSON.parse(await r.text())}catch(e){throw new Error('resposta não é JSON')}
-  if(!j||j.error||(!j.title&&!j.author_name))throw new Error(j&&j.error?'sem dados: '+str(j.error,60):'sem título/autor');
+  catch(e){
+    if(e&&e.name==='AbortError')throw new MetaError('timeout','tempo esgotado');
+    throw new MetaError(via?'proxy':'cors',via?'proxy fora do ar ou bloqueado':'bloqueado pela rede social (CORS)');
+  }finally{clearTimeout(t)}
+  if(r.status===429)throw new MetaError('limit','limite de consultas atingido (HTTP 429)');
+  if(r.status===403)throw new MetaError(via?'proxy':'blocked',via?'proxy recusou (HTTP 403)':'bloqueado pela rede social (HTTP 403)');
+  if(r.status===400||r.status===404)throw new MetaError('notfound','vídeo não encontrado, privado ou removido (HTTP '+r.status+')');
+  if(!r.ok)throw new MetaError('http','erro HTTP '+r.status);
+  const body=await r.text();
+  if(via&&via.kind==='get'){
+    let j;try{j=JSON.parse(body)}catch(e){throw new MetaError('proxy','resposta inválida do proxy')}
+    const code=j&&j.status&&j.status.http_code;
+    if(code&&code>=400)throw new MetaError(code===403||code===429?'blocked':'notfound',(code===403||code===429?'bloqueado pela rede social':'não encontrado')+' (HTTP '+code+')');
+    return {text:String(j.contents||''),finalUrl:j.status&&typeof j.status.url==='string'?j.status.url:''};
+  }
+  return {text:body,finalUrl:''};
+}
+function parseOembed(text){
+  let j;try{j=JSON.parse(text)}catch(e){throw new MetaError('blocked','bloqueado pela rede social (recebi uma página em vez de dados)')}
+  if(!j||j.error)throw new MetaError('notfound','sem dados'+(j&&j.error?': '+str(j.error,60):''));
+  if(!j.title&&!j.author_name)throw new MetaError('notfound','resposta sem título nem autor');
   return j;
 }
 function handleOf(j){
@@ -208,26 +230,74 @@ function handleOf(j){
   const m=String(j.author_url||'').match(/\/(@[\w.-]+)/);
   return m?m[1]:str(j.author_name,80);
 }
-function metaTries(url,platform){
-  const E=encodeURIComponent(url);
-  const tk='https://www.tiktok.com/oembed?url='+E, ne='https://noembed.com/embed?url='+E, yt='https://www.youtube.com/oembed?url='+E+'&format=json';
-  const out=[];
-  const main=platform==='tiktok'?tk:platform==='youtube'?yt:ne;
-  if(customProxy)out.push({name:'proxy próprio',u:wrapCustom(customProxy,main)});
-  if(platform==='tiktok'){out.push({name:'TikTok direto',u:tk});PROXIES.forEach(p=>out.push({name:p.name,u:p.wrap(tk)}));out.push({name:'noembed',u:ne})}
-  else if(platform==='youtube'){out.push({name:'noembed',u:ne},{name:'YouTube direto',u:yt});PROXIES.slice(0,1).forEach(p=>out.push({name:p.name,u:p.wrap(yt)}))}
-  else out.push({name:'noembed',u:ne});
-  return out;
+const TK_FULL=/https:\/\/(?:www\.|m\.)?tiktok\.com\/@[\w.-]+\/(?:video|photo)\/\d+/;
+function isTikTokShort(url){try{const u=new URL(url);return /^(vm|vt)\.tiktok\.com$/i.test(u.hostname)||/^\/t\//.test(u.pathname)}catch(e){return false}}
+function htmlMeta(html){
+  try{const d=new DOMParser().parseFromString(html,'text/html');
+    const g=p=>{const m=d.querySelector('meta[property="'+p+'"],meta[name="'+p+'"]');return m?m.getAttribute('content')||'':''};
+    return {title:g('og:description')||g('description')||g('og:title'),thumbUrl:safeHttps(g('og:image')),canonical:(d.querySelector('link[rel="canonical"]')||{}).href||g('og:url')};
+  }catch(e){return {title:'',thumbUrl:'',canonical:''}}
+}
+/* Resolve vm./vt./tiktok.com/t/ seguindo o redirecionamento pelos proxies. */
+async function resolveTikTok(url,log){
+  const vias=[...(customProxy?[{name:'proxy próprio',custom:customProxy}]:[]),...PROXIES];
+  for(const v of vias){
+    try{
+      const {text,finalUrl}=await getText(url,v);
+      const unesc=text.replace(/\\u002F/g,'/');
+      const full=(finalUrl.match(TK_FULL)||[])[0]||(unesc.match(TK_FULL)||[])[0]||(htmlMeta(text).canonical.match(TK_FULL)||[])[0];
+      if(full){log.push('link curto via '+v.name+': resolvido');return {full:full.replace('//m.','//www.'),html:text}}
+      log.push('link curto via '+v.name+': não resolvido (TikTok não mostrou o vídeo ao proxy)');
+    }catch(e){log.push('link curto via '+v.name+': '+e.message)}
+  }
+  return null;
+}
+async function tryOembed(endpoint,vias,log,label){
+  for(const v of vias){
+    try{const {text}=await getText(endpoint,v);const j=parseOembed(text);log.push(label+(v?' via '+v.name:' direto')+': ok');return {j,via:v?v.name:'direto'}}
+    catch(e){log.push(label+(v?' via '+v.name:' direto')+': '+e.message);if(e.code==='notfound'&&!v)break}
+  }
+  return null;
+}
+function summarize(log,extra){
+  if(extra)return extra;
+  const s=log.join(' | ');
+  if(/HTTP 429|limite/.test(s))return 'Limite de consultas atingido. Tente de novo em 1 minuto.';
+  if(/não encontrado|privado|removido/.test(s)&&!/: ok/.test(s))return 'Vídeo não encontrado: pode ser privado, removido ou o link está incompleto.';
+  if(/bloqueado/.test(s))return 'Bloqueado pela rede social.';
+  if(/proxy/.test(s))return 'Os proxies públicos estão fora do ar agora.';
+  if(/tempo esgotado/.test(s))return 'A busca demorou demais (internet lenta?).';
+  return 'Não consegui buscar as informações.';
 }
 async function fetchMeta(url,platform){
-  const log=[];
-  for(const t of metaTries(url,platform)){
-    try{const j=await getJSON(t.u);log.push(t.name+': ok');
-      return {ok:true,via:t.name,log,title:str(j.title).trim(),author:handleOf(j)||userFromUrl(url,platform),
-        thumbUrl:platform==='youtube'?(ytThumb(url)||safeHttps(j.thumbnail_url)):safeHttps(j.thumbnail_url)};
-    }catch(e){log.push(t.name+': '+e.message)}
+  const log=[];const custom=customProxy?[{name:'proxy próprio',custom:customProxy}]:[];
+  const fromUrl=userFromUrl(url,platform);
+  if(platform==='youtube'){
+    const id=ytId(url);
+    if(!id)return {ok:false,log:['ID do vídeo não encontrado no link'],reason:'Não encontrei o ID do vídeo nesse link do YouTube.',title:'',author:fromUrl,thumbUrl:''};
+    const thumbUrl='https://i.ytimg.com/vi/'+id+'/hqdefault.jpg';
+    const canon='https://www.youtube.com/watch?v='+id;
+    const r=await tryOembed('https://www.youtube.com/oembed?url='+encodeURIComponent(canon)+'&format=json',[null,...custom],log,'YouTube oEmbed')
+      ||await tryOembed('https://noembed.com/embed?url='+encodeURIComponent(canon),[null],log,'noembed');
+    if(r)return {ok:true,via:r.via==='direto'?'YouTube':r.via,log,title:str(r.j.title).trim(),author:handleOf(r.j)||fromUrl,thumbUrl,fullUrl:''};
+    return {ok:false,partial:true,log,reason:'Capa encontrada, mas o título não veio: '+summarize(log).toLowerCase(),title:'',author:fromUrl,thumbUrl};
   }
-  return {ok:false,log,title:'',author:userFromUrl(url,platform),thumbUrl:platform==='youtube'?ytThumb(url):''};
+  if(platform==='tiktok'){
+    let full=url,html='';
+    if(isTikTokShort(url)){
+      const res=await resolveTikTok(url,log);
+      if(!res)return {ok:false,log,reason:'Link curto não resolvido: '+summarize(log).toLowerCase()+' Abra o vídeo no TikTok, copie o link completo (tiktok.com/@usuario/video/…) e cole aqui.',title:'',author:fromUrl,thumbUrl:''};
+      full=res.full;html=res.html;
+    }
+    const author=userFromUrl(full,'tiktok')||fromUrl;
+    const r=await tryOembed('https://www.tiktok.com/oembed?url='+encodeURIComponent(full),[...custom,null,...PROXIES],log,'TikTok oEmbed');
+    if(r)return {ok:true,via:r.via,log,title:str(r.j.title).trim(),author:handleOf(r.j)||author,thumbUrl:safeHttps(r.j.thumbnail_url),fullUrl:full!==url?full:''};
+    if(html){const m=htmlMeta(html);if(m.title||m.thumbUrl){log.push('dados da página do vídeo: ok');return {ok:true,via:'página do vídeo',log,title:str(m.title).trim(),author,thumbUrl:m.thumbUrl,fullUrl:full}}}
+    return {ok:false,log,reason:summarize(log),title:'',author,thumbUrl:'',fullUrl:full!==url?full:''};
+  }
+  const r=await tryOembed('https://noembed.com/embed?url='+encodeURIComponent(url),[null,...custom],log,'noembed');
+  if(r)return {ok:true,via:'noembed',log,title:str(r.j.title).trim(),author:handleOf(r.j)||fromUrl,thumbUrl:safeHttps(r.j.thumbnail_url)};
+  return {ok:false,log,reason:'O Instagram não libera título nem capa sem login. Escreva uma palavra-chave rápida.',title:'',author:fromUrl,thumbUrl:''};
 }
 
 /* ---------- tópicos ---------- */
@@ -413,10 +483,10 @@ function App(){
     const t=setTimeout(async()=>{
       const m=await fetchMeta(url,platform);
       if(!live)return;
-      setMeta({url,status:m.ok?'ok':'fail',...m});
+      setMeta({url,status:m.ok?'ok':m.partial?'partial':'fail',...m});
       if(!touched.current.caption&&m.title)setCaption(c=>c||m.title);
       if(!touched.current.author&&m.author)setAuthor(a=>m.ok?m.author:(a||m.author));
-      if(m.ok)setItems(p=>p.map(i=>i.url===url?{...i,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl}:i));
+      if(m.ok||m.thumbUrl)setItems(p=>p.map(i=>i.url===url?{...i,url:m.fullUrl||i.url,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl}:i));
     },250);
     return ()=>{live=false;clearTimeout(t)};
   },[url,platform,retry]);
@@ -445,7 +515,7 @@ function App(){
       for(const it of todo){
         const m=await fetchMeta(it.url,it.platform);
         if(!m.ok)break;
-        setItems(p=>p.map(i=>i.id===it.id?{...i,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl}:i));
+        setItems(p=>p.map(i=>i.id===it.id?{...i,url:m.fullUrl||i.url,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:i.thumbUrl||m.thumbUrl}:i));
       }
     })();
   },[ready]);
@@ -474,9 +544,9 @@ function App(){
 
   function save(){
     if(!link)return;
-    if(items.some(i=>i.url===link.url)){show('Esse vídeo já está no seu jardim.',{soft:true});return}
+    if(items.some(i=>i.url===link.url||(meta&&meta.fullUrl&&i.url===meta.fullUrl))){show('Esse vídeo já está no seu jardim.',{soft:true});return}
     const m=meta&&meta.url===link.url?meta:{};
-    const it={id:newId(),url:link.url,platform:link.platform,caption:caption.trim().slice(0,2000),note:note.trim().slice(0,2000),author:author.trim().slice(0,80),
+    const it={id:newId(),url:m.fullUrl||link.url,platform:link.platform,caption:caption.trim().slice(0,2000),note:note.trim().slice(0,2000),author:author.trim().slice(0,80),
       thumbUrl:m.thumbUrl||(link.platform==='youtube'?ytThumb(link.url):''),thumb:draftThumb,topic:chosen||OUTROS,watched:false,createdAt:Date.now()};
     setItems(p=>[it,...p]);applyText('');setDraftThumb('');show('Plantado em '+it.topic+' 🌱');
   }
@@ -545,12 +615,12 @@ function App(){
       ${text.trim()&&!link&&html`<p class="hint">Não encontrei um link do TikTok, Instagram ou YouTube nesse texto.</p>`}
       ${link&&html`<div>
         ${meta&&meta.status==='loading'&&html`<p class="status" role="status"><span class="spin"></span>Buscando informações do vídeo...</p>`}
-        ${meta&&meta.status==='ok'&&html`<p class="status">✓ Informações do vídeo encontradas (via ${meta.via})</p>`}
-        ${meta&&meta.status==='fail'&&html`<div>
-          <p class="status">${link.platform==='instagram'?'O Instagram não liberou as informações. Escreva uma palavra-chave rápida.':'Não consegui buscar as informações. Escreva um título se quiser.'}</p>
-          <div class="row" style=${{alignItems:'center',margin:'4px 0 0'}}>
+        ${meta&&meta.status==='ok'&&html`<p class="status">✓ Informações encontradas (via ${meta.via})</p>`}
+        ${meta&&(meta.status==='fail'||meta.status==='partial')&&html`<div class="why">
+          <p class="status"><b>${meta.status==='partial'?'Busca incompleta':'Busca falhou'}:</b> ${meta.reason}</p>
+          <div class="row" style=${{alignItems:'center',margin:'2px 0 0',flexWrap:'wrap'}}>
             <button class="addnote" onClick=${()=>setRetry(n=>n+1)}>↻ Tentar de novo</button>
-            <details class="diag"><summary>Detalhes técnicos</summary><ul>${(meta.log||[]).map((l,i)=>html`<li key=${i}>${l}</li>`)}</ul></details>
+            <details class="diag"><summary>Ver cada tentativa</summary><ul>${(meta.log||[]).map((l,i)=>html`<li key=${i}>${l}</li>`)}</ul></details>
           </div></div>`}
         <div class="preview">
           <${Thumb} it=${draft} color=${colorOf(topics,chosen)} onPick=${e=>pickThumb(e,'draft')} onClear=${()=>setDraftThumb('')}/>
