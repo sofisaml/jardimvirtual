@@ -205,7 +205,7 @@ async function getText(target,via){
   try{r=await fetch(u,{signal:c.signal,credentials:'omit'})}
   catch(e){
     if(e&&e.name==='AbortError')throw new MetaError('timeout','tempo esgotado');
-    throw new MetaError(via?'proxy':'cors',via?'proxy fora do ar ou bloqueado':'bloqueado pela rede social (CORS)');
+    throw new MetaError(via?'proxy':'cors',via?'proxy fora do ar ou sem resposta':'bloqueado pela rede social (CORS)');
   }finally{clearTimeout(t)}
   if(r.status===429)throw new MetaError('limit','limite de consultas atingido (HTTP 429)');
   if(r.status===403)throw new MetaError(via?'proxy':'blocked',via?'proxy recusou (HTTP 403)':'bloqueado pela rede social (HTTP 403)');
@@ -224,7 +224,7 @@ async function getText(target,via){
 function parseOembed(text){
   let j;try{j=JSON.parse(text)}catch(e){throw new MetaError('blocked','bloqueado pela rede social (recebi uma página em vez de dados)')}
   if(!j||j.error)throw new MetaError('notfound','sem dados'+(j&&j.error?': '+str(j.error,60):''));
-  if(!j.title&&!j.author_name)throw new MetaError('notfound','resposta sem título nem autor');
+  if(!j.title&&!j.author_name)throw new MetaError('partial',j.embed_product_id?'o TikTok devolveu só o ID do vídeo, sem legenda nem capa':'resposta sem título nem autor');
   return j;
 }
 function handleOf(j){
@@ -242,7 +242,7 @@ function htmlMeta(html){
 }
 /* Resolve vm./vt./tiktok.com/t/ seguindo o redirecionamento pelos proxies. */
 async function resolveTikTok(url,log){
-  const vias=[...(customProxy?[{name:'proxy próprio',custom:customProxy}]:[]),...PROXIES];
+  const vias=PROXIES;
   for(const v of vias){
     try{
       const {text,finalUrl}=await getText(url,v);
@@ -265,11 +265,27 @@ function summarize(log,extra){
   if(extra)return extra;
   const s=log.join(' | ');
   if(/HTTP 429|limite/.test(s))return 'Limite de consultas atingido. Tente de novo em 1 minuto.';
+  if(/só o ID do vídeo/.test(s))return 'O TikTok devolveu só o ID do vídeo, sem legenda nem capa.';
   if(/não encontrado|privado|removido/.test(s)&&!/: ok/.test(s))return 'Vídeo não encontrado: pode ser privado, removido ou o link está incompleto.';
   if(/bloqueado/.test(s))return 'Bloqueado pela rede social.';
-  if(/proxy/.test(s))return 'Os proxies públicos estão fora do ar agora.';
+  if(/proxy/.test(s))return 'Os proxies públicos não responderam ou recusaram.';
   if(/tempo esgotado/.test(s))return 'A busca demorou demais (internet lenta?).';
   return 'Não consegui buscar as informações.';
+}
+const OWN_TIKTOK=OWN_PROXY.replace('?url=','?tiktok=');
+async function workerTikTok(url,log){
+  const c=new AbortController();const t=setTimeout(()=>c.abort(),12000);
+  try{
+    const r=await fetch(OWN_TIKTOK+encodeURIComponent(url),{signal:c.signal,credentials:'omit'});
+    const body=await r.text();
+    if(/^\s*Hello World/i.test(body)){log.push('seu proxy: ainda está com o código de exemplo da Cloudflare');return {own:'ainda está com o código de exemplo da Cloudflare ("Hello World")'}}
+    let j;try{j=JSON.parse(body)}catch(e){log.push('seu proxy: resposta inesperada');return {own:'resposta inesperada'}}
+    if(j.error==='url não permitida'){log.push('seu proxy: código antigo (sem o modo ?tiktok=)');return {own:'está com o código antigo — cole a versão 3 no Worker e clique em Deploy'}}
+    if(j.error){log.push('seu proxy: '+str(j.error,120)+(j.resolved?' → '+str(j.resolved,120):''));return {own:str(j.error,120)}}
+    log.push('seu proxy: ok ('+(j.source||'tiktok')+')');
+    return {j};
+  }catch(e){const m=e&&e.name==='AbortError'?'tempo esgotado':'sem resposta (fora do ar?)';log.push('seu proxy: '+m);return {own:m}}
+  finally{clearTimeout(t)}
 }
 async function fetchMeta(url,platform){
   const log=[];const custom=customProxy?[{name:'proxy próprio',custom:customProxy}]:[];
@@ -285,17 +301,21 @@ async function fetchMeta(url,platform){
     return {ok:false,partial:true,log,reason:'Capa encontrada, mas o título não veio: '+summarize(log).toLowerCase(),title:'',author:fromUrl,thumbUrl};
   }
   if(platform==='tiktok'){
+    const w=await workerTikTok(url,log);
+    if(w.j){const j=w.j;const fu=TK_FULL.test(j.url||'')?(j.url.match(TK_FULL)||[])[0]:'';
+      return {ok:true,via:'seu proxy',log,title:str(j.title).trim(),author:str(j.author,80)||fromUrl,thumbUrl:safeHttps(j.thumbnail_url),fullUrl:fu&&fu!==url?fu:''}}
+    const ownNote=w.own?'Seu proxy: '+w.own+'. ':'';
     let full=url,html='';
     if(isTikTokShort(url)){
       const res=await resolveTikTok(url,log);
-      if(!res)return {ok:false,log,reason:'Link curto não resolvido: '+summarize(log).toLowerCase()+' Abra o vídeo no TikTok, copie o link completo (tiktok.com/@usuario/video/…) e cole aqui.',title:'',author:fromUrl,thumbUrl:''};
+      if(!res)return {ok:false,log,reason:ownNote+'Link curto não resolvido: '+summarize(log).toLowerCase()+' Abra o vídeo no TikTok, copie o link completo (tiktok.com/@usuario/video/…) e cole aqui.',title:'',author:fromUrl,thumbUrl:''};
       full=res.full;html=res.html;
     }
     const author=userFromUrl(full,'tiktok')||fromUrl;
-    const r=await tryOembed('https://www.tiktok.com/oembed?url='+encodeURIComponent(full),[...custom,null,...PROXIES],log,'TikTok oEmbed');
+    const r=await tryOembed('https://www.tiktok.com/oembed?url='+encodeURIComponent(full),[null,...PROXIES],log,'TikTok oEmbed');
     if(r)return {ok:true,via:r.via,log,title:str(r.j.title).trim(),author:handleOf(r.j)||author,thumbUrl:safeHttps(r.j.thumbnail_url),fullUrl:full!==url?full:''};
     if(html){const m=htmlMeta(html);if(m.title||m.thumbUrl){log.push('dados da página do vídeo: ok');return {ok:true,via:'página do vídeo',log,title:str(m.title).trim(),author,thumbUrl:m.thumbUrl,fullUrl:full}}}
-    return {ok:false,log,reason:summarize(log),title:'',author,thumbUrl:'',fullUrl:full!==url?full:''};
+    return {ok:false,log,reason:ownNote+'Outros caminhos: '+summarize(log).toLowerCase(),title:'',author,thumbUrl:'',fullUrl:full!==url?full:''};
   }
   const r=await tryOembed('https://noembed.com/embed?url='+encodeURIComponent(url),[null,...custom],log,'noembed');
   if(r)return {ok:true,via:'noembed',log,title:str(r.j.title).trim(),author:handleOf(r.j)||fromUrl,thumbUrl:safeHttps(r.j.thumbnail_url)};
