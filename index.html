@@ -280,6 +280,7 @@ async function workerTikTok(url,log){
     const body=await r.text();
     if(/^\s*Hello World/i.test(body)){log.push('seu proxy: ainda está com o código de exemplo da Cloudflare');return {own:'ainda está com o código de exemplo da Cloudflare ("Hello World")'}}
     let j;try{j=JSON.parse(body)}catch(e){log.push('seu proxy: resposta inesperada');return {own:'resposta inesperada'}}
+    if(Array.isArray(j.debug))j.debug.slice(0,8).forEach(d=>log.push('seu proxy › '+str(d,160)));
     if(j.error==='url não permitida'){log.push('seu proxy: código antigo (sem o modo ?tiktok=)');return {own:'está com o código antigo — cole a versão 3 no Worker e clique em Deploy'}}
     if(j.error){log.push('seu proxy: '+str(j.error,120)+(j.resolved?' → '+str(j.resolved,120):''));return {own:str(j.error,120)}}
     log.push('seu proxy: ok ('+(j.source||'tiktok')+')');
