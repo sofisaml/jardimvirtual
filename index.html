@@ -274,7 +274,7 @@ function summarize(log,extra){
 }
 const OWN_TIKTOK=OWN_PROXY.replace('?url=','?tiktok=');
 async function workerTikTok(url,log){
-  const c=new AbortController();const t=setTimeout(()=>c.abort(),12000);
+  const c=new AbortController();const t=setTimeout(()=>c.abort(),25000);
   try{
     const r=await fetch(OWN_TIKTOK+encodeURIComponent(url),{signal:c.signal,credentials:'omit'});
     const body=await r.text();
@@ -282,7 +282,7 @@ async function workerTikTok(url,log){
     let j;try{j=JSON.parse(body)}catch(e){log.push('seu proxy: resposta inesperada');return {own:'resposta inesperada'}}
     if(Array.isArray(j.debug))j.debug.slice(0,8).forEach(d=>log.push('seu proxy › '+str(d,160)));
     if(j.error==='url não permitida'){log.push('seu proxy: código antigo (sem o modo ?tiktok=)');return {own:'está com o código antigo — cole a versão 3 no Worker e clique em Deploy'}}
-    if(j.error){log.push('seu proxy: '+str(j.error,120)+(j.resolved?' → '+str(j.resolved,120):''));return {own:str(j.error,120)}}
+    if(j.error){log.push('seu proxy: '+str(j.error,120)+(j.resolved?' → '+str(j.resolved,120):''));const f=(String(j.url||j.resolved||'').match(TK_FULL)||[])[0];return {own:str(j.error,120),full:f||''}}
     log.push('seu proxy: ok ('+(j.source||'tiktok')+')');
     return {j};
   }catch(e){const m=e&&e.name==='AbortError'?'tempo esgotado':'sem resposta (fora do ar?)';log.push('seu proxy: '+m);return {own:m}}
@@ -302,13 +302,14 @@ async function fetchMeta(url,platform){
     return {ok:false,partial:true,log,reason:'Capa encontrada, mas o título não veio: '+summarize(log).toLowerCase(),title:'',author:fromUrl,thumbUrl};
   }
   if(platform==='tiktok'){
-    const w=await workerTikTok(url,log);
+    let w=await workerTikTok(url,log);
+    if(!w.j&&/não liberou|tempo esgotado|sem resposta/.test(w.own||'')){log.push('nova tentativa no seu proxy em 2 s…');await new Promise(r=>setTimeout(r,2000));w=await workerTikTok(url,log)}
     if(w.j){const j=w.j;const fu=TK_FULL.test(j.url||'')?(j.url.match(TK_FULL)||[])[0]:'';
       const thumbData=await dataToThumb(j.thumbnail_data);if(j.thumbnail_url)log.push(thumbData?'capa guardada no app':'capa não pôde ser guardada (só o link)');
       return {ok:true,via:'seu proxy',log,title:str(j.title).trim(),author:str(j.author,80)||fromUrl,thumbUrl:safeHttps(j.thumbnail_url),thumbData,fullUrl:fu&&fu!==url?fu:''}}
     const ownNote=w.own?'Seu proxy: '+w.own+'. ':'';
-    let full=url,html='';
-    if(isTikTokShort(url)){
+    let full=w.full||url,html='';
+    if(isTikTokShort(full)){
       const res=await resolveTikTok(url,log);
       if(!res)return {ok:false,log,reason:ownNote+'Link curto não resolvido: '+summarize(log).toLowerCase()+' Abra o vídeo no TikTok, copie o link completo (tiktok.com/@usuario/video/…) e cole aqui.',title:'',author:fromUrl,thumbUrl:''};
       full=res.full;html=res.html;
@@ -540,7 +541,9 @@ function App(){
     if(!ready)return;
     (async()=>{
       const todo=itemsRef.current.filter(i=>!i.caption||!i.author||(i.platform==='tiktok'&&!i.thumb)).slice(0,25);
+      await new Promise(r=>setTimeout(r,3000));
       for(const it of todo){
+        while(textRef.current.trim())await new Promise(r=>setTimeout(r,2000));
         const m=await fetchMeta(it.url,it.platform);
         if(!m.ok)break;
         setItems(p=>p.map(i=>i.id===it.id?{...i,url:m.fullUrl||i.url,caption:i.caption||m.title,author:i.author||m.author,thumbUrl:m.thumbUrl||i.thumbUrl,thumb:i.thumb||m.thumbData||''}:i));
